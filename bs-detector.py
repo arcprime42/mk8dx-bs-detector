@@ -15,7 +15,7 @@ DRAW_BETWEEN_ALERTS = False # do not update the screen between alerts to save cp
 
 
 # load the template
-template = cv2.imread("blue-shell-template.png", cv2.IMREAD_UNCHANGED)
+template = cv2.imread("bs-template.png", cv2.IMREAD_UNCHANGED)
 template, template_alpha = template[:, :, :3], template[:, :, 3]
 template_mask = template_alpha > 0
 template_mask = template_mask.astype(numpy.uint8) * 255
@@ -26,7 +26,7 @@ template_h = template.shape[0]
 
 # init sound
 def play_sound():
-    playsound.playsound("blue-shell-alarm.mp3")
+    playsound.playsound("bs-alarm.mp3")
 
 
 # init video capture device
