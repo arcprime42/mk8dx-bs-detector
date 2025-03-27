@@ -40,9 +40,9 @@ if not ret:
     exit()
 
 
-# set the coodinates of the mini map, adjust here if needed
+# set the coordinates of the mini map, adjust here if needed
 frame_h, frame_w, _ = frame.shape
-top_left = (int(frame_w * 0.734375), int(frame_h * 0.324074))
+top_left = (int(frame_w * 0.724375), int(frame_h * 0.324074))
 bottom_right = (int(frame_w * 0.979166), int(frame_h * 0.782407))
 print(f"Video frame size: {frame_w} x {frame_h}")
 print(f"Mini map top left: {top_left}")
