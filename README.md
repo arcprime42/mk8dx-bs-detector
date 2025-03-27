@@ -31,6 +31,10 @@ Replace `pip` with `pip3` as needed. Replace `python` with `python3` as needed.
 # How to run
 Go to terminal and type:
 
-* `python bs-detector.py`
+* `python3 bs-detector.py`
+
+Optionally you may prevent the Mac computer from going to sleep with:
+
+* `caffeinate -dimsum python3 bs-detector.py`
 
 Enjoy detecting all the bs!
