@@ -28,13 +28,13 @@ pip install -r requirements.txt
 ```bash
 source venv/bin/activate        # if not already activated
 # venv\Scripts\activate         # on Windows
-python3 bs-detector.py
+python bs-detector.py
 ```
 
 On macOS, you can prevent the computer from going to sleep with:
 
 ```bash
-caffeinate -dimsum python3 bs-detector.py
+caffeinate -dimsum python bs-detector.py
 ```
 
 Enjoy detecting all the bs!
