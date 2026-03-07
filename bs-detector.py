@@ -38,14 +38,10 @@ template_h, template_w = template.shape
 
 # init video capture device
 cap = cv2.VideoCapture(CAPTURE_DEVICE_ID)
-ok = cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # minimize buffer for fresher frames
-if not cap.isOpened():
-    print("Fatal: Could not open video device.")
-    exit()
+cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # minimize buffer for fresher frames
+if not cap.isOpened(): exit("Fatal: Could not open video device.")
 ok, frame = cap.read()
-if not ok:
-    print("Fatal: Failed to capture image.")
-    exit()
+if not ok: exit("Fatal: Failed to capture image.")
 
 # set the coordinates of the mini map
 frame_h, frame_w, _ = frame.shape
@@ -76,7 +72,14 @@ last_alert_time_ms = int(time.monotonic() * 1000) - ALERT_COOLDOWN_MS
 
 # capture loop is rate limited to 60fps by cap.grab() blocking
 # capture loop is signaled to stop by stop_event.set()
-def capture_loop(): 
+def capture_loop():
+    try:
+        _capture_loop()
+    except Exception as e:
+        print(f"Fatal: capture thread crashed: {e}", flush=True)
+        stop_event.set()
+
+def _capture_loop(): 
     grab_errors = retrieve_errors = frame_count = scan_count = 0
     while True:
         if stop_event.is_set():
@@ -93,9 +96,7 @@ def capture_loop():
         if not ok:
             grab_errors += 1
             if grab_errors >= 10:
-                print("Fatal: Too many consecutive grab errors.")
-                stop_event.set()
-                return
+                raise RuntimeError("Too many consecutive grab errors.")
             time.sleep(0.01)
             continue
         grab_errors = 0
@@ -111,9 +112,7 @@ def capture_loop():
         if not ok:
             retrieve_errors += 1
             if retrieve_errors >= 10:
-                print("Fatal: Too many consecutive retrieve errors.")
-                stop_event.set()
-                return
+                raise RuntimeError("Too many consecutive retrieve errors.")
             time.sleep(0.01)
             continue
         retrieve_errors = 0
@@ -125,6 +124,13 @@ def capture_loop():
 # scan loop is rate limited by scan_queue.get() blocking
 # scan loop is signaled to stop by putting a None sentinel in the queue
 def scan_loop():
+    try:
+        _scan_loop()
+    except Exception as e:
+        print(f"Fatal: scan thread crashed: {e}", flush=True)
+        stop_event.set()
+
+def _scan_loop():
     global last_alert_time_ms
     while True:
         item = scan_queue.get()
