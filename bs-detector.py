@@ -1,8 +1,8 @@
 import atexit
 import cv2
-import numpy
+import numpy as np
 import pathlib
-import playsound
+import playsound3
 import queue
 import threading
 import time
@@ -68,10 +68,9 @@ scan_queue = queue.Queue(maxsize=1)
 draw_queue = queue.Queue(maxsize=1)
 capture_thread = None
 scan_thread = None
-last_alert_time_ms = int(time.monotonic() * 1000) - ALERT_COOLDOWN_MS
+last_alert_time_ms = None
+gray_frame = np.empty(frame.shape[:2], dtype=frame.dtype)
 
-# capture loop is rate limited to 60fps by cap.grab() blocking
-# capture loop is signaled to stop by stop_event.set()
 def capture_loop():
     try:
         _capture_loop()
@@ -79,6 +78,8 @@ def capture_loop():
         print(f"Fatal: capture thread crashed: {e}", flush=True)
         stop_event.set()
 
+# capture loop is rate limited to 60fps by cap.grab() blocking
+# capture loop is signaled to stop by stop_event.set()
 def _capture_loop(): 
     grab_errors = retrieve_errors = frame_count = scan_count = 0
     while True:
@@ -106,7 +107,8 @@ def _capture_loop():
         if not needs_scan:
             continue
         scan_count += 1
-        needs_draw = scan_count % SCAN_DRAW_RATIO == 0 and (last_alert_time_ms < 0 or DRAW_AFTER_COOLDOWN)
+        needs_draw = (scan_count % SCAN_DRAW_RATIO == 0 and 
+                     (last_alert_time_ms is None or DRAW_AFTER_COOLDOWN))
 
         ok, frame = cap.retrieve()
         if not ok:
@@ -121,8 +123,6 @@ def _capture_loop():
         except queue.Empty: pass
         scan_queue.put((frame, needs_draw))
 
-# scan loop is rate limited by scan_queue.get() blocking
-# scan loop is signaled to stop by putting a None sentinel in the queue
 def scan_loop():
     try:
         _scan_loop()
@@ -130,6 +130,8 @@ def scan_loop():
         print(f"Fatal: scan thread crashed: {e}", flush=True)
         stop_event.set()
 
+# scan loop is rate limited by scan_queue.get() blocking
+# scan loop is signaled to stop by putting a None sentinel in the queue
 def _scan_loop():
     global last_alert_time_ms
     while True:
@@ -146,11 +148,11 @@ def _scan_loop():
         roi_bgr = frame[roi_tl[1]:roi_br[1], roi_tl[0]:roi_br[0]]
         roi_gray = cv2.cvtColor(roi_bgr, cv2.COLOR_BGR2GRAY)
         result = cv2.matchTemplate(roi_gray, template, cv2.TM_CCORR_NORMED, mask=template_mask)
-        numpy.nan_to_num(result, copy=False, posinf=0.0, neginf=0.0)
+        np.nan_to_num(result, copy=False, posinf=0.0, neginf=0.0)
         _, max_val, _, max_loc = cv2.minMaxLoc(result)
 
         if max_val >= MATCH_QUALITY:
-            threading.Thread(target=lambda: playsound.playsound(str(SOUND_PATH)), daemon=True).start()
+            playsound3.playsound(str(SOUND_PATH), block=False)
             print(f"Match quality: {max_val}", flush=True)
             needs_draw = True
             match_found = True
@@ -203,10 +205,11 @@ while True:
 
     try:
         frame, match_found, shell_tl, shell_br = draw_queue.get_nowait()
-        display_frame = cv2.cvtColor(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY), cv2.COLOR_GRAY2BGR)
-        cv2.putText(display_frame, text, (text_x, text_y), text_font, text_scale, text_color, text_thickness, cv2.LINE_AA)
-        cv2.rectangle(display_frame, roi_tl, roi_br, (0, 255, 0), 2)
-        if match_found: cv2.rectangle(display_frame, shell_tl, shell_br, (0, 255, 0), 3)
-        cv2.imshow("Blue Shell Detector", display_frame) # imshow requires the main thread on macOS
+        cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY, dst=gray_frame)
+        cv2.cvtColor(gray_frame, cv2.COLOR_GRAY2BGR, dst=frame)
+        cv2.putText(frame, text, (text_x, text_y), text_font, text_scale, text_color, text_thickness, cv2.LINE_AA)
+        cv2.rectangle(frame, roi_tl, roi_br, text_color, 2)
+        if match_found: cv2.rectangle(frame, shell_tl, shell_br, text_color, 3)
+        cv2.imshow("Blue Shell Detector", frame) # imshow requires the main thread on macOS
     except queue.Empty:
         pass
