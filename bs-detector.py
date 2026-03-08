@@ -61,7 +61,9 @@ text_thickness = 2
 text_size = cv2.getTextSize(text, text_font, text_scale, text_thickness)[0]
 text_x = (frame_w - text_size[0]) // 2
 text_y = (frame_h + text_size[1]) // 10
+text_org = (text_x, text_y)
 text_color = (0, 255, 0)
+text_linetype = cv2.LINE_AA
 
 # threading and program state
 stop_event = threading.Event()
@@ -209,7 +211,7 @@ while True:
         frame, match_found, shell_tl, shell_br = draw_queue.get_nowait()
         cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY, dst=gray_frame)
         cv2.cvtColor(gray_frame, cv2.COLOR_GRAY2BGR, dst=frame)
-        cv2.putText(frame, text, (text_x, text_y), text_font, text_scale, text_color, text_thickness, cv2.LINE_AA)
+        cv2.putText(frame, text, text_org, text_font, text_scale, text_color, text_thickness, text_linetype)
         cv2.rectangle(frame, roi_tl, roi_br, text_color, 2)
         if match_found: cv2.rectangle(frame, shell_tl, shell_br, text_color, 3)
         cv2.imshow("Blue Shell Detector", frame) # imshow requires the main thread on macOS
