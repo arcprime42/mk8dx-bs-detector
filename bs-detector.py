@@ -11,15 +11,32 @@ import time
 CAPTURE_DEVICE_ID = 0 # set this yourself or add your own device detection
 MATCH_QUALITY = 0.975 # a high threshold is needed to prevent false positives
 ALERT_COOLDOWN_MS = 30000 # pause scanning for 30 sec after alert to save cpu
-SCAN_EVERY_N_FRAMES = 4 # scan every 4th frame (every ~67 ms at 60fps) to save cpu
-SCAN_DRAW_RATIO = 2 # draw every 2nd scan (every ~133 ms at 60fps) to save cpu
+SCAN_EVERY_N_FRAMES = 1 # scan every 4th frame (every ~67 ms at 60fps) to save cpu
+SCAN_DRAW_RATIO = 1 # draw every 2nd scan (every ~133 ms at 60fps) to save cpu
 DRAW_AFTER_COOLDOWN = False # set True for more visual feedback, set False to save cpu
+CV2_NUM_THREADS = 1 # 1 is ideal given this program's threading, set None to default
 
 # mini-map location (percentage of frame) for MK8DX
 ROI_LEFT_PCT = 0.724375
 ROI_TOP_PCT = 0.324074
 ROI_RIGHT_PCT = 0.979166
 ROI_BOTTOM_PCT = 0.782407
+
+# init video capture device
+if CV2_NUM_THREADS is not None: cv2.setNumThreads(CV2_NUM_THREADS)
+cap = cv2.VideoCapture(CAPTURE_DEVICE_ID)
+cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # minimize buffer for fresher frames
+if not cap.isOpened(): exit("Fatal: Could not open video device.")
+ok, frame = cap.read()
+if not ok: exit("Fatal: Failed to capture image.")
+
+# set the coordinates of the mini map
+frame_h, frame_w, _ = frame.shape
+roi_tl = (int(frame_w * ROI_LEFT_PCT), int(frame_h * ROI_TOP_PCT))
+roi_br = (int(frame_w * ROI_RIGHT_PCT), int(frame_h * ROI_BOTTOM_PCT))
+print(f"Video frame size: {frame_w} x {frame_h}")
+print(f"Mini map top left: {roi_tl}")
+print(f"Mini map bottom right: {roi_br}")
 
 # resolve file paths relative to script location
 SCRIPT_DIR = pathlib.Path(__file__).parent
@@ -36,21 +53,6 @@ template_mask = template[:, :, 3]
 template = cv2.cvtColor(template[:, :, :3], cv2.COLOR_BGR2GRAY)
 template_h, template_w = template.shape
 
-# init video capture device
-cap = cv2.VideoCapture(CAPTURE_DEVICE_ID)
-cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # minimize buffer for fresher frames
-if not cap.isOpened(): exit("Fatal: Could not open video device.")
-ok, frame = cap.read()
-if not ok: exit("Fatal: Failed to capture image.")
-
-# set the coordinates of the mini map
-frame_h, frame_w, _ = frame.shape
-roi_tl = (int(frame_w * ROI_LEFT_PCT), int(frame_h * ROI_TOP_PCT))
-roi_br = (int(frame_w * ROI_RIGHT_PCT), int(frame_h * ROI_BOTTOM_PCT))
-print(f"Video frame size: {frame_w} x {frame_h}")
-print(f"Mini map top left: {roi_tl}")
-print(f"Mini map bottom right: {roi_br}")
-
 # text to display in the top center of the screen
 text = "Working... press q to quit"
 text_font = cv2.FONT_HERSHEY_SIMPLEX
@@ -61,7 +63,7 @@ text_x = (frame_w - text_size[0]) // 2
 text_y = (frame_h + text_size[1]) // 10
 text_color = (0, 255, 0)
 
-# threading state
+# threading and program state
 stop_event = threading.Event()
 cooldown_event = threading.Event()
 scan_queue = queue.Queue(maxsize=1)
