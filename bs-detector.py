@@ -10,9 +10,9 @@ import time
 # configuration parameters
 CAPTURE_DEVICE_ID = 0 # set this yourself or add your own device detection
 MATCH_QUALITY = 0.975 # a high threshold is needed to prevent false positives
-ALERT_COOLDOWN_MS = 30000 # pause scanning for 30 sec after alert to save cpu
-SCAN_EVERY_N_FRAMES = 1 # scan every 4th frame (every ~67 ms at 60fps) to save cpu
-SCAN_DRAW_RATIO = 1 # draw every 2nd scan (every ~133 ms at 60fps) to save cpu
+COOLDOWN_SECONDS = 30 # pause scanning for 30 seconds after alert to save cpu
+SCAN_EVERY_N_FRAMES = 4 # scan every 4th frame (every ~67 ms at 60fps) to save cpu
+SCAN_DRAW_RATIO = 2 # draw every 2nd scan (every ~133 ms at 60fps) to save cpu
 DRAW_AFTER_COOLDOWN = False # set True for more visual feedback, set False to save cpu
 CV2_NUM_THREADS = 1 # 1 is ideal given this program's threading, set None to default
 
@@ -72,7 +72,7 @@ scan_queue = queue.Queue(maxsize=1)
 draw_queue = queue.Queue(maxsize=1)
 capture_thread = None
 scan_thread = None
-last_alert_time_ms = None
+last_alert_time = None
 gray_frame = np.empty(frame.shape[:2], dtype=frame.dtype)
 
 def capture_loop():
@@ -90,8 +90,7 @@ def _capture_loop():
         if stop_event.is_set():
             return
         if cooldown_event.is_set():
-            current_time_ms = int(time.monotonic() * 1000)
-            if (current_time_ms - last_alert_time_ms) >= ALERT_COOLDOWN_MS:
+            if (time.monotonic() - last_alert_time) >= COOLDOWN_SECONDS:
                 cooldown_event.clear()
             else:
                 time.sleep(0.1)
@@ -112,7 +111,7 @@ def _capture_loop():
             continue
         scan_count += 1
         needs_draw = (scan_count % SCAN_DRAW_RATIO == 0 and 
-                     (last_alert_time_ms is None or DRAW_AFTER_COOLDOWN))
+                     (last_alert_time is None or DRAW_AFTER_COOLDOWN))
 
         ok, frame = cap.retrieve()
         if not ok:
@@ -137,7 +136,7 @@ def scan_loop():
 # scan loop is rate limited by scan_queue.get() blocking
 # scan loop is signaled to stop by putting a None sentinel in the queue
 def _scan_loop():
-    global last_alert_time_ms
+    global last_alert_time
     while True:
         item = scan_queue.get()
         if item is None:
@@ -162,7 +161,7 @@ def _scan_loop():
             match_found = True
             shell_tl = (roi_tl[0] + max_loc[0], roi_tl[1] + max_loc[1])
             shell_br = (shell_tl[0] + template_w, shell_tl[1] + template_h)
-            last_alert_time_ms = int(time.monotonic() * 1000)
+            last_alert_time = time.monotonic()
             cooldown_event.set()
 
         if needs_draw:
