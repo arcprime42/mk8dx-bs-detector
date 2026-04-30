@@ -14,6 +14,7 @@ CAPTURE_HEIGHT = 720
 CAPTURE_FPS = 60
 # try low-decode formats first; fallback to MJPG if the device/backend rejects them
 CAPTURE_FOURCC_CANDIDATES = ("YUY2", "UYVY", "NV12", "MJPG")
+GRAB_RATE_REPORT_SECONDS = 1.0
 MATCH_QUALITY = 0.975 # a high threshold is needed to prevent false positives
 COOLDOWN_SECONDS = 30 # pause scanning for 30 seconds after alert to save cpu
 SCAN_EVERY_N_FRAMES = 4 # scan every 4th frame (every ~67 ms at 60fps) to save cpu
@@ -105,6 +106,8 @@ def capture_loop():
 # capture loop is signaled to stop by stop_event.set()
 def _capture_loop(): 
     grab_errors = retrieve_errors = frame_count = scan_count = 0
+    grab_report_start = time.monotonic()
+    grabs_in_window = 0
     while True:
         if stop_event.is_set():
             return
@@ -117,6 +120,14 @@ def _capture_loop():
             time.sleep(0.01)
             continue
         grab_errors = 0
+        grabs_in_window += 1
+        now = time.monotonic()
+        window_elapsed = now - grab_report_start
+        if window_elapsed >= GRAB_RATE_REPORT_SECONDS:
+            effective_grab_rate = grabs_in_window / window_elapsed
+            print(f"effective_grab_rate: {effective_grab_rate:.2f} fps", flush=True)
+            grab_report_start = now
+            grabs_in_window = 0
 
         if cooldown_event.is_set():
             if (time.monotonic() - last_alert_time) > COOLDOWN_SECONDS:
