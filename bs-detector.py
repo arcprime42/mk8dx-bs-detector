@@ -9,8 +9,8 @@ import time
 
 # configuration parameters
 CAPTURE_DEVICE_ID = 0 # set this yourself or add your own device detection
-CAPTURE_WIDTH = 1280
-CAPTURE_HEIGHT = 720
+CAPTURE_WIDTH = 1920
+CAPTURE_HEIGHT = 1080
 CAPTURE_FPS = 60
 # try low-decode formats first; fallback to MJPG if the device/backend rejects them
 CAPTURE_FOURCC_CANDIDATES = ("YUY2", "UYVY", "NV12", "MJPG")
