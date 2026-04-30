@@ -2,13 +2,18 @@ import atexit
 import cv2
 import numpy as np
 import pathlib
-import playsound3
 import queue
+import simpleaudio
 import threading
 import time
 
 # configuration parameters
 CAPTURE_DEVICE_ID = 0 # set this yourself or add your own device detection
+CAPTURE_WIDTH = 1280
+CAPTURE_HEIGHT = 720
+CAPTURE_FPS = 60
+# try low-decode formats first; fallback to MJPG if the device/backend rejects them
+CAPTURE_FOURCC_CANDIDATES = ("YUY2", "UYVY", "NV12", "MJPG")
 MATCH_QUALITY = 0.975 # a high threshold is needed to prevent false positives
 COOLDOWN_SECONDS = 30 # pause scanning for 30 seconds after alert to save cpu
 SCAN_EVERY_N_FRAMES = 4 # scan every 4th frame (every ~67 ms at 60fps) to save cpu
@@ -26,9 +31,22 @@ ROI_BOTTOM_PCT = 0.782407
 if CV2_NUM_THREADS is not None: cv2.setNumThreads(CV2_NUM_THREADS)
 cap = cv2.VideoCapture(CAPTURE_DEVICE_ID)
 cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # minimize buffer for fresher frames
+cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAPTURE_WIDTH)
+cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAPTURE_HEIGHT)
+cap.set(cv2.CAP_PROP_FPS, CAPTURE_FPS)
+for fourcc in CAPTURE_FOURCC_CANDIDATES:
+    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*fourcc))
 if not cap.isOpened(): exit("Fatal: Could not open video device.")
 ok, frame = cap.read()
 if not ok: exit("Fatal: Failed to capture image.")
+
+applied_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+applied_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+applied_fps = cap.get(cv2.CAP_PROP_FPS)
+applied_fourcc = int(cap.get(cv2.CAP_PROP_FOURCC))
+applied_fourcc_str = "".join(chr((applied_fourcc >> (8 * i)) & 0xFF) for i in range(4))
+print(f"Capture mode requested: {CAPTURE_WIDTH}x{CAPTURE_HEIGHT} @ {CAPTURE_FPS}fps, FOURCC candidates={CAPTURE_FOURCC_CANDIDATES}")
+print(f"Capture mode applied: {applied_width}x{applied_height} @ {applied_fps:.2f}fps, FOURCC={applied_fourcc_str!r}")
 
 # set the coordinates of the mini map
 frame_h, frame_w, _ = frame.shape
@@ -41,7 +59,7 @@ print(f"Mini map bottom right: {roi_br}")
 # resolve file paths relative to script location
 SCRIPT_DIR = pathlib.Path(__file__).parent
 TEMPLATE_PATH = SCRIPT_DIR / "bs-template.png"
-SOUND_PATH = SCRIPT_DIR / "bs-alarm.mp3"
+SOUND_PATH = SCRIPT_DIR / "bs-alarm.wav"
 for path in [TEMPLATE_PATH, SOUND_PATH]:
     if not path.exists():
         exit(f"Fatal: File not found at {path}")
@@ -52,6 +70,7 @@ if template is None: exit(f"Fatal: Could not read template at {TEMPLATE_PATH}")
 template_mask = template[:, :, 3]
 template = cv2.cvtColor(template[:, :, :3], cv2.COLOR_BGR2GRAY)
 template_h, template_w = template.shape
+sound_wave = simpleaudio.WaveObject.from_wave_file(str(SOUND_PATH))
 
 # text to display in the top center of the screen
 text = "Working... press q to quit"
@@ -89,12 +108,6 @@ def _capture_loop():
     while True:
         if stop_event.is_set():
             return
-        if cooldown_event.is_set():
-            if (time.monotonic() - last_alert_time) >= COOLDOWN_SECONDS:
-                cooldown_event.clear()
-            else:
-                time.sleep(0.1)
-                continue
 
         ok = cap.grab()
         if not ok:
@@ -105,6 +118,10 @@ def _capture_loop():
             continue
         grab_errors = 0
 
+        if cooldown_event.is_set():
+            if (time.monotonic() - last_alert_time) > COOLDOWN_SECONDS:
+                cooldown_event.clear()
+            continue
         frame_count += 1
         needs_scan = frame_count % SCAN_EVERY_N_FRAMES == 0
         if not needs_scan:
@@ -122,9 +139,10 @@ def _capture_loop():
             continue
         retrieve_errors = 0
 
+        capture_ts = time.monotonic()
         try: scan_queue.get_nowait()
         except queue.Empty: pass
-        scan_queue.put((frame, needs_draw))
+        scan_queue.put((frame, needs_draw, capture_ts))
 
 def scan_loop():
     try:
@@ -143,7 +161,7 @@ def _scan_loop():
             return
         if cooldown_event.is_set():
             continue
-        frame, needs_draw = item
+        frame, needs_draw, capture_ts = item
         match_found = False
         shell_tl = None
         shell_br = None
@@ -155,8 +173,11 @@ def _scan_loop():
         _, max_val, _, max_loc = cv2.minMaxLoc(result)
 
         if max_val >= MATCH_QUALITY:
-            playsound3.playsound(str(SOUND_PATH), block=False)
+            age_at_match = time.monotonic() - capture_ts
+            sound_wave.play()
+            age_at_play_call = time.monotonic() - capture_ts
             print(f"Match quality: {max_val}", flush=True)
+            print(f"age_at_match: {age_at_match:.3f}s, age_at_play_call: {age_at_play_call:.3f}s", flush=True)
             needs_draw = True
             match_found = True
             shell_tl = (roi_tl[0] + max_loc[0], roi_tl[1] + max_loc[1])
