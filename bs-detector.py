@@ -45,6 +45,7 @@ selected_fourcc_reason = "no_candidate_applied"
 for fourcc in CAPTURE_FOURCC_CANDIDATES:
     requested_fourcc = cv2.VideoWriter_fourcc(*fourcc)
     set_ok = cap.set(cv2.CAP_PROP_FOURCC, requested_fourcc)
+    print(f"set ok: {set_ok}")
     reported_fourcc = int(cap.get(cv2.CAP_PROP_FOURCC))
     if reported_fourcc == requested_fourcc:
         selected_fourcc = fourcc
