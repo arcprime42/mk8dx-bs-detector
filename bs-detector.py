@@ -28,6 +28,9 @@ ROI_TOP_PCT = 0.324074
 ROI_RIGHT_PCT = 0.979166
 ROI_BOTTOM_PCT = 0.782407
 
+def decode_fourcc(fourcc_code):
+    return "".join(chr((fourcc_code >> (8 * i)) & 0xFF) for i in range(4))
+
 # init video capture device
 if CV2_NUM_THREADS is not None: cv2.setNumThreads(CV2_NUM_THREADS)
 cap = cv2.VideoCapture(CAPTURE_DEVICE_ID)
@@ -35,8 +38,23 @@ cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # minimize buffer for fresher frames
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAPTURE_WIDTH)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAPTURE_HEIGHT)
 cap.set(cv2.CAP_PROP_FPS, CAPTURE_FPS)
+default_fourcc = int(cap.get(cv2.CAP_PROP_FOURCC))
+default_fourcc_str = decode_fourcc(default_fourcc)
+selected_fourcc = None
+selected_fourcc_reason = "no_candidate_applied"
 for fourcc in CAPTURE_FOURCC_CANDIDATES:
-    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*fourcc))
+    requested_fourcc = cv2.VideoWriter_fourcc(*fourcc)
+    set_ok = cap.set(cv2.CAP_PROP_FOURCC, requested_fourcc)
+    reported_fourcc = int(cap.get(cv2.CAP_PROP_FOURCC))
+    if reported_fourcc == requested_fourcc:
+        selected_fourcc = fourcc
+        selected_fourcc_reason = "verified_readback"
+        break
+    # Some backends do not report FOURCC; treat a successful set as best-effort acceptance.
+    if reported_fourcc == 0 and set_ok:
+        selected_fourcc = fourcc
+        selected_fourcc_reason = "accepted_no_readback"
+        break
 if not cap.isOpened(): exit("Fatal: Could not open video device.")
 ok, frame = cap.read()
 if not ok: exit("Fatal: Failed to capture image.")
@@ -45,8 +63,10 @@ applied_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
 applied_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 applied_fps = cap.get(cv2.CAP_PROP_FPS)
 applied_fourcc = int(cap.get(cv2.CAP_PROP_FOURCC))
-applied_fourcc_str = "".join(chr((applied_fourcc >> (8 * i)) & 0xFF) for i in range(4))
+applied_fourcc_str = decode_fourcc(applied_fourcc)
 print(f"Capture mode requested: {CAPTURE_WIDTH}x{CAPTURE_HEIGHT} @ {CAPTURE_FPS}fps, FOURCC candidates={CAPTURE_FOURCC_CANDIDATES}")
+print(f"Capture FOURCC default reported: {default_fourcc_str!r} ({default_fourcc})")
+print(f"Capture FOURCC selected: {selected_fourcc!r} ({selected_fourcc_reason})")
 print(f"Capture mode applied: {applied_width}x{applied_height} @ {applied_fps:.2f}fps, FOURCC={applied_fourcc_str!r}")
 
 # set the coordinates of the mini map
