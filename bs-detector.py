@@ -46,7 +46,7 @@ ok, frame = cap.read()
 if not ok:
     exit("Fatal: Failed to capture image.")
 
-# gather effectivecapture device settings
+# gather effective capture device settings
 effective_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
 effective_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 effective_fps = cap.get(cv2.CAP_PROP_FPS)
