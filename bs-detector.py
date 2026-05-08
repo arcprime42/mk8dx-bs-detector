@@ -8,13 +8,12 @@ import threading
 import time
 
 # configuration parameters
+DEBUG = False
 CAPTURE_DEVICE_ID = 0 # set this yourself or add your own device detection
-CAPTURE_WIDTH = 1920
-CAPTURE_HEIGHT = 1080
-CAPTURE_FPS = 60
-# try low-decode formats first; fallback to MJPG if the device/backend rejects them
-CAPTURE_FOURCC_CANDIDATES = ("YUY2", "UYVY", "NV12", "MJPG")
-GRAB_RATE_REPORT_SECONDS = 1.0
+REQ_CAPTURE_WIDTH = 1920 # recommended 1920
+REQ_CAPTURE_HEIGHT = 1080 # recommended 1080
+REQ_CAPTURE_FPS = 60 # recommended 60
+REQ_CAPTURE_FOURCC = None # recommended YUY2, UYVY, NV12, MJPG, None for default
 MATCH_QUALITY = 0.975 # a high threshold is needed to prevent false positives
 COOLDOWN_SECONDS = 30 # pause scanning for 30 seconds after alert to save cpu
 SCAN_EVERY_N_FRAMES = 4 # scan every 4th frame (every ~67 ms at 60fps) to save cpu
@@ -31,32 +30,15 @@ ROI_BOTTOM_PCT = 0.782407
 def decode_fourcc(fourcc_code):
     return "".join(chr((fourcc_code >> (8 * i)) & 0xFF) for i in range(4))
 
-# init video capture device
+# init capture device
 if CV2_NUM_THREADS is not None: cv2.setNumThreads(CV2_NUM_THREADS)
 cap = cv2.VideoCapture(CAPTURE_DEVICE_ID)
-cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # minimize buffer for fresher frames
-cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAPTURE_WIDTH)
-cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAPTURE_HEIGHT)
-cap.set(cv2.CAP_PROP_FPS, CAPTURE_FPS)
-default_fourcc = int(cap.get(cv2.CAP_PROP_FOURCC))
-default_fourcc_str = decode_fourcc(default_fourcc)
-selected_fourcc = None
-selected_fourcc_reason = "no_candidate_applied"
-for fourcc in CAPTURE_FOURCC_CANDIDATES:
-    requested_fourcc = cv2.VideoWriter_fourcc(*fourcc)
-    set_ok = cap.set(cv2.CAP_PROP_FOURCC, requested_fourcc)
-    print(f"set ok: {set_ok}")
-    reported_fourcc = int(cap.get(cv2.CAP_PROP_FOURCC))
-    if reported_fourcc == requested_fourcc:
-        selected_fourcc = fourcc
-        selected_fourcc_reason = "verified_readback"
-        break
-    # Some backends do not report FOURCC; treat a successful set as best-effort acceptance.
-    if reported_fourcc == 0 and set_ok:
-        selected_fourcc = fourcc
-        selected_fourcc_reason = "accepted_no_readback"
-        break
 if not cap.isOpened(): exit("Fatal: Could not open video device.")
+cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # minimize buffer for fresher frames
+cap.set(cv2.CAP_PROP_FRAME_WIDTH, REQ_CAPTURE_WIDTH)
+cap.set(cv2.CAP_PROP_FRAME_HEIGHT, REQ_CAPTURE_HEIGHT)
+cap.set(cv2.CAP_PROP_FPS, REQ_CAPTURE_FPS)
+if REQ_CAPTURE_FOURCC is not None: cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*REQ_CAPTURE_FOURCC))
 ok, frame = cap.read()
 if not ok: exit("Fatal: Failed to capture image.")
 
@@ -65,9 +47,6 @@ applied_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 applied_fps = cap.get(cv2.CAP_PROP_FPS)
 applied_fourcc = int(cap.get(cv2.CAP_PROP_FOURCC))
 applied_fourcc_str = decode_fourcc(applied_fourcc)
-print(f"Capture mode requested: {CAPTURE_WIDTH}x{CAPTURE_HEIGHT} @ {CAPTURE_FPS}fps, FOURCC candidates={CAPTURE_FOURCC_CANDIDATES}")
-print(f"Capture FOURCC default reported: {default_fourcc_str!r} ({default_fourcc})")
-print(f"Capture FOURCC selected: {selected_fourcc!r} ({selected_fourcc_reason})")
 print(f"Capture mode applied: {applied_width}x{applied_height} @ {applied_fps:.2f}fps, FOURCC={applied_fourcc_str!r}")
 
 # set the coordinates of the mini map
@@ -141,12 +120,14 @@ def _capture_loop():
             time.sleep(0.01)
             continue
         grab_errors = 0
+
         grabs_in_window += 1
         now = time.monotonic()
         window_elapsed = now - grab_report_start
-        if window_elapsed >= GRAB_RATE_REPORT_SECONDS:
+        if window_elapsed >= 1.0:
             effective_grab_rate = grabs_in_window / window_elapsed
-            print(f"effective_grab_rate: {effective_grab_rate:.2f} fps", flush=True)
+            if DEBUG:
+                print(f"effective_grab_rate: {effective_grab_rate:.2f} fps", flush=True)
             grab_report_start = now
             grabs_in_window = 0
 
@@ -207,9 +188,8 @@ def _scan_loop():
         if max_val >= MATCH_QUALITY:
             age_at_match = time.monotonic() - capture_ts
             sound_wave.play()
-            age_at_play_call = time.monotonic() - capture_ts
             print(f"Match quality: {max_val}", flush=True)
-            print(f"age_at_match: {age_at_match:.3f}s, age_at_play_call: {age_at_play_call:.3f}s", flush=True)
+            print(f"age_at_match: {age_at_match:.3f}s", flush=True)
             needs_draw = True
             match_found = True
             shell_tl = (roi_tl[0] + max_loc[0], roi_tl[1] + max_loc[1])
