@@ -31,23 +31,28 @@ def decode_fourcc(fourcc_code):
     return "".join(chr((fourcc_code >> (8 * i)) & 0xFF) for i in range(4))
 
 # init capture device
-if CV2_NUM_THREADS is not None: cv2.setNumThreads(CV2_NUM_THREADS)
+if CV2_NUM_THREADS is not None:
+    cv2.setNumThreads(CV2_NUM_THREADS)
 cap = cv2.VideoCapture(CAPTURE_DEVICE_ID)
-if not cap.isOpened(): exit("Fatal: Could not open video device.")
+if not cap.isOpened():
+    exit("Fatal: Could not open video device.")
 cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # minimize buffer for fresher frames
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, REQ_CAPTURE_WIDTH)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, REQ_CAPTURE_HEIGHT)
 cap.set(cv2.CAP_PROP_FPS, REQ_CAPTURE_FPS)
-if REQ_CAPTURE_FOURCC is not None: cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*REQ_CAPTURE_FOURCC))
+if REQ_CAPTURE_FOURCC is not None:
+    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*REQ_CAPTURE_FOURCC))
 ok, frame = cap.read()
-if not ok: exit("Fatal: Failed to capture image.")
+if not ok:
+    exit("Fatal: Failed to capture image.")
 
-applied_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-applied_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-applied_fps = cap.get(cv2.CAP_PROP_FPS)
-applied_fourcc = int(cap.get(cv2.CAP_PROP_FOURCC))
-applied_fourcc_str = decode_fourcc(applied_fourcc)
-print(f"Capture mode applied: {applied_width}x{applied_height} @ {applied_fps:.2f}fps, FOURCC={applied_fourcc_str!r}")
+# gather effectivecapture device settings
+effective_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+effective_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+effective_fps = cap.get(cv2.CAP_PROP_FPS)
+effective_fourcc = int(cap.get(cv2.CAP_PROP_FOURCC))
+effective_fourcc_str = decode_fourcc(effective_fourcc)
+print(f"Capture mode effective: {effective_width}x{effective_height} @ {effective_fps:.2f}fps, FOURCC={effective_fourcc_str!r}")
 
 # set the coordinates of the mini map
 frame_h, frame_w, _ = frame.shape
@@ -67,7 +72,8 @@ for path in [TEMPLATE_PATH, SOUND_PATH]:
 
 # load the template
 template = cv2.imread(str(TEMPLATE_PATH), cv2.IMREAD_UNCHANGED)
-if template is None: exit(f"Fatal: Could not read template at {TEMPLATE_PATH}")
+if template is None:
+    exit(f"Fatal: Could not read template at {TEMPLATE_PATH}")
 template_mask = template[:, :, 3]
 template = cv2.cvtColor(template[:, :, :3], cv2.COLOR_BGR2GRAY)
 template_h, template_w = template.shape
@@ -104,7 +110,7 @@ def capture_loop():
 
 # capture loop is rate limited to 60fps by cap.grab() blocking
 # capture loop is signaled to stop by stop_event.set()
-def _capture_loop(): 
+def _capture_loop():
     grab_errors = retrieve_errors = frame_count = scan_count = 0
     grab_report_start = time.monotonic()
     grabs_in_window = 0
@@ -121,15 +127,15 @@ def _capture_loop():
             continue
         grab_errors = 0
 
-        grabs_in_window += 1
-        now = time.monotonic()
-        window_elapsed = now - grab_report_start
-        if window_elapsed >= 1.0:
-            effective_grab_rate = grabs_in_window / window_elapsed
-            if DEBUG:
+        if DEBUG:
+            grabs_in_window += 1
+            now = time.monotonic()
+            window_elapsed = now - grab_report_start
+            if window_elapsed >= 1.0:
+                effective_grab_rate = grabs_in_window / window_elapsed
                 print(f"effective_grab_rate: {effective_grab_rate:.2f} fps", flush=True)
-            grab_report_start = now
-            grabs_in_window = 0
+                grab_report_start = now
+                grabs_in_window = 0
 
         if cooldown_event.is_set():
             if (time.monotonic() - last_alert_time) > COOLDOWN_SECONDS:
@@ -140,7 +146,7 @@ def _capture_loop():
         if not needs_scan:
             continue
         scan_count += 1
-        needs_draw = (scan_count % SCAN_DRAW_RATIO == 0 and 
+        needs_draw = (scan_count % SCAN_DRAW_RATIO == 0 and
                      (last_alert_time is None or DRAW_AFTER_COOLDOWN))
 
         ok, frame = cap.retrieve()
@@ -245,7 +251,8 @@ while True:
         cv2.cvtColor(gray_frame, cv2.COLOR_GRAY2BGR, dst=frame)
         cv2.putText(frame, text, text_org, text_font, text_scale, text_color, text_thickness, text_linetype)
         cv2.rectangle(frame, roi_tl, roi_br, text_color, 2)
-        if match_found: cv2.rectangle(frame, shell_tl, shell_br, text_color, 3)
+        if match_found:
+            cv2.rectangle(frame, shell_tl, shell_br, text_color, 3)
         cv2.imshow("Blue Shell Detector", frame) # imshow requires the main thread on macOS
     except queue.Empty:
         pass
